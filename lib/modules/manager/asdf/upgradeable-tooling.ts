@@ -1,6 +1,7 @@
 import { regEx } from '../../../util/regex';
 import { DartVersionDatasource } from '../../datasource/dart-version';
 import { DockerDatasource } from '../../datasource/docker';
+import { DotnetVersionDatasource } from '../../datasource/dotnet-version';
 import { FlutterVersionDatasource } from '../../datasource/flutter-version';
 import { GithubReleasesDatasource } from '../../datasource/github-releases';
 import { GithubTagsDatasource } from '../../datasource/github-tags';
@@ -115,6 +116,14 @@ export const upgradeableTooling: Record<string, ToolingDefinition> = {
       versioning: `${regexVersioning.id}:^(?<major>\\d+?)\\.(?<minor>\\d+?)\\.(?<patch>\\d+)\\.(?<build>\\d+)$`,
     },
   },
+  cookiecutter: {
+    asdfPluginUrl: 'https://github.com/shawon-crosen/asdf-cookiecutter',
+    config: {
+      datasource: GithubReleasesDatasource.id,
+      packageName: 'cookiecutter/cookiecutter',
+      versioning: semverVersioning.id,
+    },
+  },
   cosign: {
     asdfPluginUrl: 'https://gitlab.com/wt0f/asdf-cosign',
     config: {
@@ -152,6 +161,13 @@ export const upgradeableTooling: Record<string, ToolingDefinition> = {
       extractVersion: '^v(?<version>\\S+)',
     },
   },
+  'dotnet-core': {
+    asdfPluginUrl: 'https://github.com/emersonsoares/asdf-dotnet-core',
+    config: {
+      datasource: DotnetVersionDatasource.id,
+      packageName: 'dotnet-sdk',
+    },
+  },
   dprint: {
     asdfPluginUrl: 'https://github.com/asdf-community/asdf-dprint',
     config: {
@@ -164,6 +180,14 @@ export const upgradeableTooling: Record<string, ToolingDefinition> = {
     config: {
       datasource: GithubReleasesDatasource.id,
       packageName: 'kayac/ecspresso',
+      extractVersion: '^v(?<version>\\S+)',
+    },
+  },
+  'editorconfig-checker': {
+    asdfPluginUrl: 'https://github.com/gabitchov/asdf-editorconfig-checker',
+    config: {
+      datasource: GithubReleasesDatasource.id,
+      packageName: 'editorconfig-checker/editorconfig-checker',
       extractVersion: '^v(?<version>\\S+)',
     },
   },
@@ -218,6 +242,22 @@ export const upgradeableTooling: Record<string, ToolingDefinition> = {
       datasource: GithubReleasesDatasource.id,
       packageName: 'cli/cli',
       extractVersion: '^v(?<version>\\S+)',
+    },
+  },
+  gitleaks: {
+    asdfPluginUrl: 'https://github.com/jmcvetta/asdf-gitleaks',
+    config: {
+      datasource: GithubReleasesDatasource.id,
+      packageName: 'gitleaks/gitleaks',
+      extractVersion: '^v(?<version>\\S+)',
+    },
+  },
+  gleam: {
+    asdfPluginUrl: 'https://github.com/asdf-community/asdf-gleam.git',
+    config: {
+      datasource: GithubTagsDatasource.id,
+      packageName: 'gleam-lang/gleam',
+      extractVersion: '^v(?<version>.+)',
     },
   },
   gohugo: hugoDefinition,
@@ -284,6 +324,14 @@ export const upgradeableTooling: Record<string, ToolingDefinition> = {
       datasource: GithubTagsDatasource.id,
       packageName: 'idris-lang/Idris-dev',
       extractVersion: '^v(?<version>\\S+)',
+    },
+  },
+  istioctl: {
+    asdfPluginUrl: 'https://github.com/virtualstaticvoid/asdf-istioctl',
+    config: {
+      datasource: GithubReleasesDatasource.id,
+      packageName: 'istio/istio',
+      versioning: semverVersioning.id,
     },
   },
   java: {
@@ -405,6 +453,15 @@ export const upgradeableTooling: Record<string, ToolingDefinition> = {
     config: {
       datasource: GithubReleasesDatasource.id,
       packageName: 'lua/lua',
+      extractVersion: '^v(?<version>\\S+)',
+    },
+  },
+  'markdownlint-cli2': {
+    asdfPluginUrl:
+      'https://github.com/paulo-ferraz-oliveira/asdf-markdownlint-cli2',
+    config: {
+      datasource: GithubTagsDatasource.id,
+      packageName: 'DavidAnson/markdownlint-cli2',
       extractVersion: '^v(?<version>\\S+)',
     },
   },
@@ -651,6 +708,14 @@ export const upgradeableTooling: Record<string, ToolingDefinition> = {
     config: {
       datasource: GithubReleasesDatasource.id,
       packageName: 'hashicorp/vault',
+      extractVersion: '^v(?<version>\\S+)',
+    },
+  },
+  yamllint: {
+    asdfPluginUrl: 'https://github.com/ericcornelissen/asdf-yamllint',
+    config: {
+      datasource: GithubTagsDatasource.id,
+      packageName: 'adrienverge/yamllint',
       extractVersion: '^v(?<version>\\S+)',
     },
   },

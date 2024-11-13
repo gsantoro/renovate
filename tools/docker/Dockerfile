@@ -1,21 +1,30 @@
+# syntax=docker/dockerfile:1.11.0@sha256:1f2be5a2aa052cbd9aedf893d17c63277c3d1c51b3fb0f3b029c6b34f658d057
+
 ARG BASE_IMAGE_TYPE=slim
 
 # --------------------------------------
 # slim image
 # --------------------------------------
-FROM ghcr.io/renovatebot/base-image:2.24.3@sha256:e7704e885fb948f01b9b81430b1f80f5c14169db9cc89a92d2a781fd1e2d2f12 AS slim-base
+FROM ghcr.io/renovatebot/base-image:7.41.1@sha256:58cb099d1cc46d84077b05b5a7ee3d44f185394c3c6d28da74c70d47e4ab1299 AS slim-base
 
 # --------------------------------------
 # full image
 # --------------------------------------
-FROM ghcr.io/renovatebot/base-image:2.24.3-full@sha256:1804690db9a7dbb1a225aa519bb7da748b0dfc3bb2a4569eef9e5889cd61ee93 AS full-base
+FROM ghcr.io/renovatebot/base-image:7.41.1-full@sha256:5a300f1567ed348c8a39da58730c9d568d46da743b0e71d567be82e298398d12 AS full-base
 
 # --------------------------------------
 # build image
 # --------------------------------------
-FROM --platform=$BUILDPLATFORM ghcr.io/renovatebot/base-image:2.24.3@sha256:e7704e885fb948f01b9b81430b1f80f5c14169db9cc89a92d2a781fd1e2d2f12 AS build
+FROM --platform=$BUILDPLATFORM ghcr.io/renovatebot/base-image:7.41.1@sha256:58cb099d1cc46d84077b05b5a7ee3d44f185394c3c6d28da74c70d47e4ab1299 AS build
+
+# We want a specific node version here
+# renovate: datasource=node-version
+RUN install-tool node 20.18.0
+
+WORKDIR /usr/local/renovate
 
 ARG TARGETPLATFORM
+ARG TARGETARCH
 ARG BUILDPLATFORM
 
 RUN set -ex; \
@@ -23,39 +32,42 @@ RUN set -ex; \
   uname -a; \
   true
 
-WORKDIR /usr/local/renovate
+# replace `amd64` with `x86_64` for `node`
+ENV ARCH=${TARGETARCH/amd64/x86_64}
+ENV ARCH=${ARCH/arm64/aarch64}
 
+# fetch static node binary
+RUN set -ex; \
+  ver=$(node --version); ver=${ver:1} \
+  temp_dir="$(mktemp -d)"; \
+  curl -fsSL "https://github.com/containerbase/node-prebuild/releases/download/${ver}/node-${ver}-${ARCH}.tar.xz" -o ${temp_dir}/node.tar.xz; \
+  bsdtar --strip 1 -C ${temp_dir} -xf ${temp_dir}/node.tar.xz; \
+  cp ${temp_dir}/bin/node ./node; \
+  true
+
+# fetch npm packages
 ENV CI=1 npm_config_modules_cache_max_age=0 \
-  npm_config_loglevel=info \
-  ARCH=arm64
+  npm_config_loglevel=info
 
-COPY pnpm-lock.yaml ./
 
-# trim `linux/` from TARGETPLATFORM
 # replace `amd64` with `x64` for `node`
+ENV ARCH=${TARGETARCH/amd64/x64}
+
+COPY --link pnpm-lock.yaml ./
+
 # set `npm_config_arch` for `prebuild-install`
 # set `npm_config_platform_arch` for `install-artifact-from-github`
 # only fetch deps from lockfile https://pnpm.io/cli/fetch
 RUN set -ex; \
-  arch=${TARGETPLATFORM:6}; \
-  export npm_config_arch=${arch/amd64/x64} npm_config_platform_arch=${arch/amd64/x64}; \
+  export npm_config_arch=${ARCH} npm_config_platform_arch=${ARCH}; \
   corepack pnpm fetch --prod; \
   true
 
-COPY . ./
+COPY --link . ./
 
-# install
+# install npm packages
 RUN set -ex; \
   corepack pnpm install --prod --offline --ignore-scripts; \
-  true
-
-# test
-COPY tools/docker/bin/ /usr/local/bin/
-# RE2 doesn't work on cross compile
-ENV RENOVATE_X_IGNORE_RE2=true
-RUN set -ex; \
-  renovate --version; \
-  renovate-config-validator; \
   true
 
 # --------------------------------------
@@ -70,24 +82,19 @@ LABEL org.opencontainers.image.source="https://github.com/renovatebot/renovate" 
 
 WORKDIR /usr/src/app
 
-COPY tools/docker/bin/ /usr/local/bin/
+COPY tools/docker/bin/ /usr/local/sbin/
+ENTRYPOINT ["/usr/local/sbin/renovate-entrypoint.sh"]
 CMD ["renovate"]
 
 ARG RENOVATE_VERSION
 
-COPY --from=build --chown=root:root /usr/local/renovate/ /usr/local/renovate/
+COPY --link --from=build --chown=root:root /usr/local/renovate/ /usr/local/renovate/
 
-# Compabillity, so `config.js` can access renovate and deps
-RUN set -ex; \
-  mkdir /opt/containerbase/tools/renovate; \
-  echo "${RENOVATE_VERSION}" > /opt/containerbase/versions/renovate; \
-  ln -sf /usr/local/renovate /opt/containerbase/tools/renovate/${RENOVATE_VERSION}; \
-  ln -sf /usr/local/renovate/node_modules ./node_modules; \
-  true
-
+# test
 RUN set -ex; \
   renovate --version; \
-  node -e "new require('re2')('.*').exec('test');new require('better-sqlite3')(':memory:')"; \
+  pushd /usr/local/renovate/; \
+  ./node -e "new require('re2')('.*').exec('test');new require('better-sqlite3')(':memory:')"; \
   true
 
 LABEL \

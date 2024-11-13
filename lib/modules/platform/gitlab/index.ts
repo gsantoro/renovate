@@ -482,10 +482,13 @@ export async function getBranchStatus(
   }
   logger.debug(`Got res with ${branchStatuses.length} results`);
 
-  const mrStatus = (await getBranchPr(branchName))?.headPipelineStatus;
-  if (!is.undefined(mrStatus)) {
+  const mr = await getBranchPr(branchName);
+  if (mr && mr.sha !== mr.headPipelineSha && mr.headPipelineStatus) {
+    logger.debug(
+      'Merge request head pipeline has different sha to commit, assuming merged results pipeline',
+    );
     branchStatuses.push({
-      status: mrStatus as BranchState,
+      status: mr.headPipelineStatus as BranchState,
       name: 'head_pipeline',
     });
   }
@@ -646,14 +649,14 @@ async function ignoreApprovals(pr: number): Promise<void> {
 
 async function tryPrAutomerge(
   pr: number,
-  platformOptions: PlatformPrOptions | undefined,
+  platformPrOptions: PlatformPrOptions | undefined,
 ): Promise<void> {
   try {
-    if (platformOptions?.gitLabIgnoreApprovals) {
+    if (platformPrOptions?.gitLabIgnoreApprovals) {
       await ignoreApprovals(pr);
     }
 
-    if (platformOptions?.usePlatformAutomerge) {
+    if (platformPrOptions?.usePlatformAutomerge) {
       // https://docs.gitlab.com/ee/api/merge_requests.html#merge-status
       const desiredDetailedMergeStatus = [
         'mergeable',
@@ -753,7 +756,7 @@ export async function createPr({
   prBody: rawDescription,
   draftPR,
   labels,
-  platformOptions,
+  platformPrOptions,
 }: CreatePRConfig): Promise<Pr> {
   let title = prTitle;
   if (draftPR) {
@@ -783,11 +786,11 @@ export async function createPr({
     config.prList.push(pr);
   }
 
-  if (platformOptions?.autoApprove) {
+  if (platformPrOptions?.autoApprove) {
     await approvePr(pr.iid);
   }
 
-  await tryPrAutomerge(pr.iid, platformOptions);
+  await tryPrAutomerge(pr.iid, platformPrOptions);
 
   return massagePr(pr);
 }
@@ -804,6 +807,7 @@ export async function getPr(iid: number): Promise<GitlabPr> {
     bodyStruct: getPrBodyStruct(mr.description),
     state: mr.state === 'opened' ? 'open' : mr.state,
     headPipelineStatus: mr.head_pipeline?.status,
+    headPipelineSha: mr.head_pipeline?.sha,
     hasAssignees: !!(mr.assignee?.id ?? mr.assignees?.[0]?.id),
     reviewers: mr.reviewers?.map(({ username }) => username),
     title: mr.title,
@@ -821,7 +825,7 @@ export async function updatePr({
   addLabels,
   removeLabels,
   state,
-  platformOptions,
+  platformPrOptions,
   targetBranch,
 }: UpdatePrConfig): Promise<void> {
   let title = prTitle;
@@ -856,16 +860,16 @@ export async function updatePr({
     { body },
   );
 
-  if (platformOptions?.autoApprove) {
+  if (platformPrOptions?.autoApprove) {
     await approvePr(iid);
   }
 }
 
 export async function reattemptPlatformAutomerge({
   number: iid,
-  platformOptions,
+  platformPrOptions,
 }: ReattemptPlatformAutomergeConfig): Promise<void> {
-  await tryPrAutomerge(iid, platformOptions);
+  await tryPrAutomerge(iid, platformPrOptions);
 
   logger.debug(`PR platform automerge re-attempted...prNo: ${iid}`);
 }
@@ -897,26 +901,31 @@ export async function mergePr({ id }: MergePRConfig): Promise<boolean> {
 }
 
 export function massageMarkdown(input: string): string {
-  let desc = input
+  const desc = input
     .replace(regEx(/Pull Request/g), 'Merge Request')
     .replace(regEx(/\bPR\b/g), 'MR')
     .replace(regEx(/\bPRs\b/g), 'MRs')
     .replace(regEx(/\]\(\.\.\/pull\//g), '](!')
     // Strip unicode null characters as GitLab markdown does not permit them
     .replace(regEx(/\u0000/g), ''); // eslint-disable-line no-control-regex
+  return smartTruncate(desc, maxBodyLength());
+}
 
+export function maxBodyLength(): number {
   if (semver.lt(defaults.version, '13.4.0')) {
     logger.debug(
       { version: defaults.version },
       'GitLab versions earlier than 13.4 have issues with long descriptions, truncating to 25K characters',
     );
-
-    desc = smartTruncate(desc, 25000);
+    return 25000;
   } else {
-    desc = smartTruncate(desc, 1000000);
+    return 1000000;
   }
+}
 
-  return desc;
+// istanbul ignore next: no need to test
+export function labelCharLimit(): number {
+  return 255;
 }
 
 // Branch
@@ -1127,7 +1136,7 @@ export async function findIssue(title: string): Promise<Issue | null> {
       return null;
     }
     return await getIssue(issue.iid);
-  } catch (err) /* istanbul ignore next */ {
+  } catch /* istanbul ignore next */ {
     logger.warn('Error finding issue');
     return null;
   }
@@ -1274,7 +1283,7 @@ export async function addReviewers(
         newReviewers.map((r) => async () => {
           try {
             return [await getUserID(r)];
-          } catch (err) {
+          } catch {
             // Unable to fetch userId, try resolve as a group
             return getMemberUserIDs(r);
           }
